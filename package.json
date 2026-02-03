@@ -1,0 +1,13 @@
+{
+  "name": "life-of-word",
+  "version": "1.0.0",
+  "description": "Daily Bible reading app for the Life of Word program at Maranatha Vision Church",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
