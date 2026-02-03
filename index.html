@@ -181,6 +181,7 @@
         font-size: 0.98rem;
         color: var(--nkrv-color);
         font-family: "Malgun Gothic", Dotum, sans-serif; /* Good for Korean */
+        word-break: keep-all;
       }
 
       .text-nkrv.placeholder {
@@ -641,6 +642,7 @@
             start: chunk[0],
             end: chunk[chunk.length - 1],
             length: chunk.length,
+            verses: chunk,
           });
         }
 
@@ -807,31 +809,83 @@
       async function fetchSegment(plan, segmentIndex) {
         const segment = plan.segments[segmentIndex];
         const query = formatEsvQuery(plan.bookName, segment);
-        const data = await fetchEsv(query);
-        const parsed = parseEsvPassages(data.passages, data.canonical || query);
+
+        let data = null;
+        let esvError = null;
+
+        try {
+          data = await fetchEsv(query);
+        } catch (err) {
+          console.warn("ESV fetch failed, using fallback mode:", err);
+          esvError = err;
+        }
+
+        // If ESV worked, use the parsed passages
+        if (data) {
+          const parsed = parseEsvPassages(
+            data.passages,
+            data.canonical || query
+          );
+
+          return {
+            title: plan.reference,
+            query: data.canonical || query,
+            items: parsed.items.map((item) => {
+              if (item.type !== "verse") {
+                return item;
+              }
+
+              const nkrvKey =
+                plan.bookKey && item.chapter && item.verse
+                  ? `${plan.bookKey}${item.chapter}:${item.verse}`
+                  : null;
+              const nkrvText =
+                nkrvKey && plan.nkrvData[nkrvKey]
+                  ? plan.nkrvData[nkrvKey].trim()
+                  : "";
+
+              return {
+                ...item,
+                nkrv: nkrvText,
+              };
+            }),
+          };
+        }
+
+        // FALLBACK: Generate items from segment.verses directly
+        const items = [];
+        let currentChapter = null;
+
+        segment.verses.forEach((v) => {
+          // Add chapter header if needed
+          if (v.chapter !== currentChapter) {
+            currentChapter = v.chapter;
+            items.push({
+              type: "chapter",
+              label: `Chapter ${currentChapter}`,
+            });
+          }
+
+          const nkrvKey = `${plan.bookKey}${v.chapter}:${v.verse}`;
+          const nkrvText = plan.nkrvData[nkrvKey]
+            ? plan.nkrvData[nkrvKey].trim()
+            : "";
+
+          items.push({
+            type: "verse",
+            ref: `${v.chapter}:${v.verse}`, // Simple ref format
+            esv: "ESV text unavailable (API error)", // Fallback text
+            chapter: v.chapter,
+            verse: v.verse,
+            nkrv: nkrvText,
+            isFallback: true, // Marker for styling if needed
+          });
+        });
 
         return {
           title: plan.reference,
-          query: data.canonical || query,
-          items: parsed.items.map((item) => {
-            if (item.type !== "verse") {
-              return item;
-            }
-
-            const nkrvKey =
-              plan.bookKey && item.chapter && item.verse
-                ? `${plan.bookKey}${item.chapter}:${item.verse}`
-                : null;
-            const nkrvText =
-              nkrvKey && plan.nkrvData[nkrvKey]
-                ? plan.nkrvData[nkrvKey].trim()
-                : "";
-
-            return {
-              ...item,
-              nkrv: nkrvText,
-            };
-          }),
+          query: query,
+          items: items,
         };
       }
 
@@ -902,11 +956,17 @@
 
           const nkrvText = item.nkrv || "NKRV text not found for this verse.";
           const nkrvClass = item.nkrv ? "text-nkrv" : "text-nkrv placeholder";
+
+          // If fallback mode (ESV failed), don't show the ESV block at all
+          const esvHtml = item.isFallback
+            ? ""
+            : `<div class="text-esv">${escapeHtml(item.esv)}</div>`;
+
           html += `
             <div class="verse-container">
               <div class="verse-number">${escapeHtml(item.ref)}</div>
               <div class="verse-text">
-                <div class="text-esv">${escapeHtml(item.esv)}</div>
+                ${esvHtml}
                 <div class="${nkrvClass}">${escapeHtml(nkrvText)}</div>
               </div>
             </div>
