@@ -33,7 +33,7 @@
       header {
         background: linear-gradient(90deg, #1f2d3d, #2c3e50);
         color: white;
-        padding: 1rem;
+        padding: 16px 7px;
         position: sticky;
         top: 0;
         z-index: 100;
@@ -44,17 +44,18 @@
         margin: 0;
         font-size: 1.25rem;
         letter-spacing: 0.2px;
+        text-align: center;
       }
 
       .controls {
         display: flex;
-        gap: 12px;
+        gap: 8px;
         margin-top: 12px;
         flex-wrap: wrap;
       }
 
       select {
-        padding: 10px 12px;
+        padding: 7px;
         border-radius: 8px;
         border: 1px solid var(--border);
         background: white;
@@ -141,28 +142,38 @@
 
       /* Interlinear Styles */
       .verse-container {
-        background: var(--card-bg);
-        margin-bottom: 16px;
-        padding: 18px 20px;
-        border-radius: 12px;
-        border: 1px solid var(--border);
-        box-shadow: var(--shadow);
+        /* background: var(--card-bg); Removed for Chapter Card mode */
+        /* margin-bottom: 16px; */
+        padding: 10px;
+        /* border-radius: 12px; */
+        /* border: 1px solid var(--border); */
+        /* box-shadow: var(--shadow); */
+        border-bottom: 1px solid #f1f5f9;
         display: grid;
-        grid-template-columns: 64px 1fr;
-        gap: 14px;
+        grid-template-columns: 48px 1fr; /* Slightly narrower number col */
+        gap: 18px;
+      }
+
+      .verse-container:last-child {
+        border-bottom: none;
+      }
+
+      .verse-container:hover {
+        background-color: #fcfdff;
       }
 
       .verse-number {
-        width: 48px;
-        height: 48px;
-        border-radius: 12px;
-        background: var(--accent-soft);
-        color: var(--primary);
-        font-weight: 700;
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        background: #f1f5f9;
+        color: var(--muted);
+        font-weight: 600;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 0.95rem;
+        font-size: 0.85rem;
+        margin-top: 2px;
       }
 
       .verse-text {
@@ -215,6 +226,71 @@
         background: var(--border);
       }
 
+      /* Chapter Card Layout (Cascade by Chapter) */
+      .chapter-card {
+        background: var(--card-bg);
+        border-radius: 16px;
+        box-shadow: var(--shadow);
+        border: 1px solid var(--border);
+        margin-bottom: 1rem;
+        overflow: hidden;
+      }
+
+      .chapter-card-header {
+        background: linear-gradient(to right, #f8fafc, #ffffff);
+        padding: 14px 24px;
+        border-bottom: 1px solid var(--border);
+        font-weight: 700;
+        color: var(--primary);
+        font-size: 1.1rem;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        user-select: none;
+        transition: background-color 0.2s;
+      }
+
+      .chapter-card-header:hover {
+        background: #f1f5f9;
+      }
+
+      .chapter-card-header::before {
+        content: "";
+        display: block;
+        width: 4px;
+        height: 18px;
+        background: var(--accent);
+        border-radius: 2px;
+      }
+
+      .chapter-card-header .toggle-icon {
+        margin-left: auto;
+        transition: transform 0.3s ease;
+      }
+
+      .chapter-card.collapsed .chapter-card-header .toggle-icon {
+        transform: rotate(-90deg);
+      }
+
+      .chapter-card-content {
+        transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+        max-height: 5000px; /* Arbitrary large height */
+        opacity: 1;
+        overflow: hidden;
+      }
+
+      .chapter-card.collapsed .chapter-card-content {
+        max-height: 0;
+        opacity: 0;
+        border-bottom: none;
+      }
+
+      /* Hide border when collapsed to look cleaner */
+      .chapter-card.collapsed {
+        border-bottom-color: transparent;
+      }
+
       .loading,
       .error {
         text-align: center;
@@ -237,15 +313,16 @@
 
       @media (max-width: 640px) {
         .verse-container {
-          grid-template-columns: 1fr;
+          grid-template-columns: 32px 1fr; /* Keep side-by-side but narrower number */
+          gap: 12px; /* Reduce gap */
+          padding: 8px; /* Reduce padding */
         }
 
         .verse-number {
-          width: auto;
-          height: auto;
-          padding: 4px 10px;
-          border-radius: 999px;
-          justify-content: flex-start;
+          width: 32px;
+          height: 32px;
+          font-size: 0.8rem;
+          margin-top: 0; /* Align better */
         }
       }
 
@@ -262,7 +339,7 @@
   </head>
   <body>
     <header>
-      <h1>Daily Word: Life</h1>
+      <h1>말씀의 삶 과제 성경구절</h1>
       <div class="controls">
         <select id="weekSelect"></select>
         <select id="daySelect"></select>
@@ -873,7 +950,7 @@
 
           items.push({
             type: "verse",
-            ref: `${v.chapter}:${v.verse}`, // Simple ref format
+            ref: `${v.verse}`, // Simple ref format
             esv: "ESV text unavailable (API error)", // Fallback text
             chapter: v.chapter,
             verse: v.verse,
@@ -943,15 +1020,49 @@
           `;
         }
 
+        // --- RENDER BY CHAPTER CARD ---
+        let currentChapterHtml = "";
+        let isCardOpen = false;
+        let cardCount = 0;
+
+        const closeCard = () => {
+          if (isCardOpen) {
+            html += `<div class="chapter-card-content">`;
+            html += currentChapterHtml; // Add verses
+            html += `</div>`; // Close .chapter-card-content
+            html += `</div>`; // Close .chapter-card
+            currentChapterHtml = "";
+            isCardOpen = false;
+          }
+        };
+
+        const openCard = (label) => {
+          closeCard();
+            cardCount++;
+          // First card is open (no class), others are collapsed
+          const collapsedClass = cardCount === 1 ? "" : "collapsed";
+
+          html += `<div class="chapter-card ${collapsedClass}">`;
+          html += `
+            <div class="chapter-card-header" onclick="this.parentElement.classList.toggle('collapsed')">
+              ${escapeHtml(label)}
+              <svg class="toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </div>
+          `;
+          isCardOpen = true;
+        };
+
         result.items.forEach((item) => {
           if (item.type === "chapter") {
-            html += `
-              <div class="chapter-marker">
-                <span>${escapeHtml(item.label)}</span>
-                <div class="chapter-line"></div>
-              </div>
-            `;
+            openCard(item.label);
             return;
+          }
+
+          // If we encounter a verse but no card is open (e.g. start of passage without explicit chapter change), open one
+          if (!isCardOpen) {
+            openCard(`Chapter ${item.chapter || "?"}`);
           }
 
           const nkrvText = item.nkrv || "NKRV text not found for this verse.";
@@ -962,7 +1073,7 @@
             ? ""
             : `<div class="text-esv">${escapeHtml(item.esv)}</div>`;
 
-          html += `
+          currentChapterHtml += `
             <div class="verse-container">
               <div class="verse-number">${escapeHtml(item.ref)}</div>
               <div class="verse-text">
@@ -972,6 +1083,9 @@
             </div>
           `;
         });
+
+        closeCard(); // Close any remaining card
+        // --- END RENDER ---
 
         html += `
           <div class="copyright-note">
