@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -52,6 +52,31 @@
         gap: 8px;
         margin-top: 12px;
         flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* Toggle Switch */
+      .toggle-switch {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: white;
+        padding: 5px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+        font-size: 0.9rem;
+        color: var(--text);
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .toggle-switch input {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+        margin: 0;
       }
 
       select {
@@ -82,13 +107,13 @@
       .container {
         max-width: 960px;
         margin: 0 auto;
-        padding: 24px;
+        padding: 16px;
       }
 
       .reading-header {
         text-align: center;
-        margin: 1.5rem 0 2rem;
-        padding-bottom: 1rem;
+        /* margin: 0; */
+        /* padding-bottom: 1rem; */
         border-bottom: 1px solid var(--border);
       }
 
@@ -183,16 +208,19 @@
       }
 
       .text-esv {
-        font-size: 1.03rem;
-        color: var(--esv-color);
-        font-weight: 600;
+        font-size: 0.95rem;
+        color: var(--muted);
+        font-weight: 400;
+        margin-top: 4px;
       }
 
       .text-nkrv {
-        font-size: 0.98rem;
-        color: var(--nkrv-color);
-        font-family: "Malgun Gothic", Dotum, sans-serif; /* Good for Korean */
+        font-size: 1.05rem;
+        color: var(--primary);
+        font-weight: 600;
+        font-family: "Malgun Gothic", Dotum, sans-serif;
         word-break: keep-all;
+        line-height: 1.6;
       }
 
       .text-nkrv.placeholder {
@@ -229,7 +257,7 @@
       /* Chapter Card Layout (Cascade by Chapter) */
       .chapter-card {
         background: var(--card-bg);
-        border-radius: 16px;
+        border-radius: 12px;
         box-shadow: var(--shadow);
         border: 1px solid var(--border);
         margin-bottom: 1rem;
@@ -238,7 +266,7 @@
 
       .chapter-card-header {
         background: linear-gradient(to right, #f8fafc, #ffffff);
-        padding: 14px 24px;
+        padding: 10px 16px;
         border-bottom: 1px solid var(--border);
         font-weight: 700;
         color: var(--primary);
@@ -274,8 +302,10 @@
       }
 
       .chapter-card-content {
-        transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
-        max-height: 5000px; /* Arbitrary large height */
+        transition:
+          max-height 0.5s ease-in-out,
+          opacity 0.5s ease-in-out;
+        max-height: 100000px; /* Increased from 5000px to prevent cutoff */
         opacity: 1;
         overflow: hidden;
       }
@@ -343,6 +373,10 @@
       <div class="controls">
         <select id="weekSelect"></select>
         <select id="daySelect"></select>
+        <label class="toggle-switch">
+          <input type="checkbox" id="esvToggle" />
+          <span>ESV</span>
+        </label>
         <button id="loadBtn">Read</button>
       </div>
     </header>
@@ -458,6 +492,7 @@
       const weekSelect = document.getElementById("weekSelect");
       const daySelect = document.getElementById("daySelect");
       const loadBtn = document.getElementById("loadBtn");
+      const esvToggle = document.getElementById("esvToggle"); // Toggle
       const contentArea = document.getElementById("contentArea");
       const ESV_API_URL = "/api/esv";
       const NKRV_JSON_PATH = "/assets/bible.json";
@@ -991,10 +1026,6 @@
         let html = `
           <div class="reading-header">
             <h2>Reading: ${escapeHtml(currentPlan.reference)}</h2>
-            <p class="reading-sub">
-              Showing verses ${start}-${end} of ${currentPlan.totalVerses}
-              (Part ${segmentLabel}) • ESV via API • NKRV local JSON
-            </p>
           </div>
         `;
 
@@ -1038,7 +1069,7 @@
 
         const openCard = (label) => {
           closeCard();
-            cardCount++;
+          cardCount++;
           // First card is open (no class), others are collapsed
           const collapsedClass = cardCount === 1 ? "" : "collapsed";
 
@@ -1069,16 +1100,18 @@
           const nkrvClass = item.nkrv ? "text-nkrv" : "text-nkrv placeholder";
 
           // If fallback mode (ESV failed), don't show the ESV block at all
-          const esvHtml = item.isFallback
-            ? ""
-            : `<div class="text-esv">${escapeHtml(item.esv)}</div>`;
+          const showEsv = esvToggle.checked;
+          const esvHtml =
+            item.isFallback || !showEsv
+              ? ""
+              : `<div class="text-esv">${escapeHtml(item.esv)}</div>`;
 
           currentChapterHtml += `
             <div class="verse-container">
               <div class="verse-number">${escapeHtml(item.ref)}</div>
               <div class="verse-text">
-                ${esvHtml}
                 <div class="${nkrvClass}">${escapeHtml(nkrvText)}</div>
+                ${esvHtml}
               </div>
             </div>
           `;
@@ -1120,6 +1153,12 @@
       }
 
       // 4. Render Logic
+      esvToggle.addEventListener("change", () => {
+        if (currentPlan) {
+          renderSegment();
+        }
+      });
+
       loadBtn.addEventListener("click", async () => {
         const reference = daySelect.value;
 
