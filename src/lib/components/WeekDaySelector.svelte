@@ -10,6 +10,7 @@
   import { Label } from "$lib/components/ui/label";
   import { BOOK_MAP } from "$lib/data/bookMap.js";
   import { weeks, getDays } from "$lib/data/readingPlan.js";
+  import { progressStore } from "$lib/stores/progressStore.js";
 
   let {
     selectedWeek = $bindable("Week 1"),
@@ -19,6 +20,15 @@
   } = $props();
 
   let days = $derived.by(() => getDays(selectedWeek));
+  let progress = $state($progressStore);
+
+  // Subscribe to progress updates
+  $effect(() => {
+    const unsubscribe = progressStore.subscribe(value => {
+      progress = value;
+    });
+    return unsubscribe;
+  });
 
   const bookKeys = Object.keys(BOOK_MAP).sort(
     (a, b) => b.length - a.length,
@@ -40,8 +50,33 @@
     return match ? `${match[1]}주` : week;
   }
 
+  function getWeekChapterCount(week) {
+    return Object.values(progress.readings).filter(
+      reading => reading.week === week && reading.completed
+    ).length;
+  }
+
+  function getTotalChaptersInReference(reference) {
+    // Parse references like "Genesis 1-10" or "Acts 1-5"
+    const match = reference.match(/(\d+)-(\d+)$/);
+    if (match) {
+      const start = parseInt(match[1]);
+      const end = parseInt(match[2]);
+      return end - start + 1;
+    }
+    return 1; // Default to 1 chapter if can't parse
+  }
+
+  function getWeekTotalChapters(week) {
+    const weekDays = getDays(week);
+    return weekDays.reduce((sum, day) => {
+      return sum + getTotalChaptersInReference(day);
+    }, 0);
+  }
+
   let selectedDayLabel = $derived.by(() => {
     if (!selectedDay) return "일";
+    if (selectedDay === "숙제보기") return "📝 숙제보기";
     const index = days.indexOf(selectedDay);
     const readingLabel = toKoreanReading(selectedDay);
     return index >= 0 ? `${index + 1}일: ${readingLabel}` : readingLabel;
@@ -52,10 +87,24 @@
     return toKoreanWeekLabel(selectedWeek);
   });
 
-  // Auto-select first day when week changes
+  // Weekly progress indicator (chapter count)
+  let weekProgress = $derived.by(() => {
+    const completed = getWeekChapterCount(selectedWeek);
+    const total = getWeekTotalChapters(selectedWeek);
+    return total > 0 ? `${completed}/${total}` : "";
+  });
+
+  // Track previous week to detect actual week changes
+  let previousWeek = $state(selectedWeek);
+
+  // Auto-select first day ONLY when week actually changes (not on every render)
   $effect(() => {
-    if (days.length > 0) {
-      selectedDay = days[0];
+    if (selectedWeek !== previousWeek) {
+      // Week changed, select first day
+      if (days.length > 0) {
+        selectedDay = days[0];
+      }
+      previousWeek = selectedWeek;
     }
   });
 </script>
@@ -64,11 +113,20 @@
   <div class="select-week">
     <Select type="single" bind:value={selectedWeek}>
       <SelectTrigger class="w-full" aria-label="Week">
-        <span class="select-value">{selectedWeekLabel}</span>
+        <span class="select-value">
+          {selectedWeekLabel}
+          {#if weekProgress}
+            ({weekProgress})
+          {/if}
+        </span>
       </SelectTrigger>
       <SelectContent>
         {#each weeks as week}
-          <SelectItem value={week}>{toKoreanWeekLabel(week)}</SelectItem>
+          {@const completed = getWeekChapterCount(week)}
+          {@const total = getWeekTotalChapters(week)}
+          <SelectItem value={week}>
+            {toKoreanWeekLabel(week)} ({completed}/{total})
+          </SelectItem>
         {/each}
       </SelectContent>
     </Select>
@@ -85,6 +143,9 @@
             {index + 1}일: {toKoreanReading(reading)}
           </SelectItem>
         {/each}
+        <SelectItem value="숙제보기" class="homework-item">
+          📝 숙제보기
+        </SelectItem>
       </SelectContent>
     </Select>
   </div>
@@ -94,7 +155,7 @@
     <Label for="esv-toggle">ESV</Label>
   </div>
 
-  <Button onclick={onload}>Read</Button>
+  <Button onclick={onload}>읽기</Button>
 </div>
 
 <style>
@@ -139,7 +200,7 @@
 
     .select-week {
       flex: 0 0 auto;
-      width: 110px;
+      width: 140px;
     }
 
     .select-day {
