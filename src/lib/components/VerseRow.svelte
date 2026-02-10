@@ -72,8 +72,8 @@
   }
 
   .text-esv {
-    font-size: 0.95rem;
-    color: #6b7280;
+    font-size: 1.1rem;
+    color: #183883;
     font-weight: 400;
     margin-top: 4px;
   }
