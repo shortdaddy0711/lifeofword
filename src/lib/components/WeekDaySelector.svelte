@@ -110,52 +110,56 @@
 </script>
 
 <div class="controls">
-  <div class="select-week">
-    <Select type="single" bind:value={selectedWeek}>
-      <SelectTrigger class="w-full" aria-label="Week">
-        <span class="select-value">
-          {selectedWeekLabel}
-          {#if weekProgress}
-            ({weekProgress})
-          {/if}
-        </span>
-      </SelectTrigger>
-      <SelectContent>
-        {#each weeks as week}
-          {@const completed = getWeekChapterCount(week)}
-          {@const total = getWeekTotalChapters(week)}
-          <SelectItem value={week}>
-            {toKoreanWeekLabel(week)} ({completed}/{total})
+  <div class="selectors-group">
+    <div class="select-week">
+      <Select type="single" bind:value={selectedWeek}>
+        <SelectTrigger class="w-full" aria-label="Week">
+          <span class="select-value">
+            {selectedWeekLabel}
+            {#if weekProgress}
+              ({weekProgress})
+            {/if}
+          </span>
+        </SelectTrigger>
+        <SelectContent>
+          {#each weeks as week}
+            {@const completed = getWeekChapterCount(week)}
+            {@const total = getWeekTotalChapters(week)}
+            <SelectItem value={week}>
+              {toKoreanWeekLabel(week)} ({completed}/{total})
+            </SelectItem>
+          {/each}
+        </SelectContent>
+      </Select>
+    </div>
+
+    <div class="select-day">
+      <Select type="single" bind:value={selectedDay}>
+        <SelectTrigger class="w-full" aria-label="Day">
+          <span class="select-value">{selectedDayLabel}</span>
+        </SelectTrigger>
+        <SelectContent>
+          {#each days as reading, index}
+            <SelectItem value={reading}>
+              {index + 1}일: {toKoreanReading(reading)}
+            </SelectItem>
+          {/each}
+          <SelectItem value="숙제보기" class="homework-item">
+            📝 숙제보기
           </SelectItem>
-        {/each}
-      </SelectContent>
-    </Select>
+        </SelectContent>
+      </Select>
+    </div>
   </div>
 
-  <div class="select-day">
-    <Select type="single" bind:value={selectedDay}>
-      <SelectTrigger class="w-full" aria-label="Day">
-        <span class="select-value">{selectedDayLabel}</span>
-      </SelectTrigger>
-      <SelectContent>
-        {#each days as reading, index}
-          <SelectItem value={reading}>
-            {index + 1}일: {toKoreanReading(reading)}
-          </SelectItem>
-        {/each}
-        <SelectItem value="숙제보기" class="homework-item">
-          📝 숙제보기
-        </SelectItem>
-      </SelectContent>
-    </Select>
-  </div>
+  <div class="actions-group">
+    <div class="esv-toggle">
+      <Switch id="esv-toggle" bind:checked={esvEnabled} />
+      <Label for="esv-toggle">ESV</Label>
+    </div>
 
-  <div class="esv-toggle">
-    <Switch id="esv-toggle" bind:checked={esvEnabled} />
-    <Label for="esv-toggle">ESV</Label>
+    <Button onclick={onload}>읽기</Button>
   </div>
-
-  <Button onclick={onload}>읽기</Button>
 </div>
 
 <style>
@@ -166,6 +170,22 @@
     align-items: center;
     justify-content: center;
     padding: 8px 0;
+  }
+
+  .selectors-group {
+    display: flex;
+    gap: 8px;
+    flex: 1 1 100%; /* Default to full width on mobile */
+    min-width: 0;
+  }
+
+  .actions-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end; /* Align buttons to right on mobile? Or center? */
+    flex: 1 1 100%; /* Default to full width on mobile */
+    justify-content: center;
   }
 
   /* Default mobile-first flexible styles */
@@ -192,10 +212,21 @@
     gap: 8px;
   }
 
-  @media (min-width: 391px) {
+  @media (min-width: 438px) {
     .controls {
       flex-wrap: nowrap;
       justify-content: space-between;
+    }
+
+    .selectors-group {
+      flex: 1 1 auto;
+      width: auto;
+    }
+
+    .actions-group {
+      flex: 0 0 auto;
+      width: auto;
+      justify-content: flex-start;
     }
 
     .select-week {
