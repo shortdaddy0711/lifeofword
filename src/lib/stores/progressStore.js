@@ -5,6 +5,7 @@
 
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
+import { readingPlan } from '$lib/data/readingPlan.js';
 
 const STORAGE_KEY = 'lifeOfWord_progress';
 const STORAGE_VERSION = 1;
@@ -210,12 +211,26 @@ function createProgressStore() {
      */
     getWeekSummaries(week) {
       const data = loadProgress();
+      const weekDays = readingPlan[week] || [];
+
       return Object.values(data.readings)
         .filter(reading => reading.week === week && reading.completed)
         .sort((a, b) => {
-          // Sort by day, then by chapter
-          if (a.day !== b.day) return a.day.localeCompare(b.day);
-          return a.chapter.localeCompare(b.chapter);
+          // Sort by day using readingPlan order
+          if (a.day !== b.day) {
+            const indexA = weekDays.indexOf(a.day);
+            const indexB = weekDays.indexOf(b.day);
+            
+            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+            if (indexA !== -1) return -1; // A is valid, B is not -> A comes first
+            if (indexB !== -1) return 1;  // B is valid, A is not -> B comes first
+            return a.day.localeCompare(b.day);
+          }
+
+          // Sort by chapter number
+          const numA = parseInt(a.chapter) || 0;
+          const numB = parseInt(b.chapter) || 0;
+          return numA - numB;
         });
     },
 
