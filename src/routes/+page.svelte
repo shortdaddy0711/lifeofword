@@ -11,7 +11,7 @@
   import { buildReadingPlan } from "$lib/utils/nkrvLoader.js";
   import { fetchSegment } from "$lib/utils/esvParser.js";
   import { progressStore } from "$lib/stores/progressStore.js";
-  import { Check, RotateCcw } from "@lucide/svelte";
+  import { Check, RotateCcw, ArrowUp } from "@lucide/svelte";
 
   // Load last reading position and preferences
   const lastPosition = progressStore.getLastPosition();
@@ -206,6 +206,21 @@
   function resetProgress() {
     progressStore.reset();
   }
+
+  // Scroll-to-top button visibility
+  let showScrollTop = $state(false);
+
+  $effect(() => {
+    function handleScroll() {
+      showScrollTop = window.scrollY > 300;
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  });
+
+  function scrollToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 </script>
 
 <svelte:head>
@@ -298,6 +313,17 @@
     purposes and the ESV text is shown within API limits.
   </p>
 </div>
+
+{#if showScrollTop}
+  <button
+    class="scroll-top-btn"
+    onclick={scrollToTop}
+    aria-label="Scroll to top"
+    title="맨 위로"
+  >
+    <ArrowUp size={20} />
+  </button>
+{/if}
 
 <style>
   .progress-summary {
@@ -394,5 +420,35 @@
     margin-top: 3rem;
     border-top: 1px solid #eee;
     padding-top: 1rem;
+  }
+
+  .scroll-top-btn {
+    position: fixed;
+    bottom: 2rem;
+    right: 1.5rem;
+    z-index: 100;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px rgba(102, 126, 234, 0.5);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    opacity: 0.9;
+  }
+
+  .scroll-top-btn:hover {
+    opacity: 1;
+    transform: translateY(-3px);
+    box-shadow: 0 6px 18px rgba(102, 126, 234, 0.65);
+  }
+
+  .scroll-top-btn:active {
+    transform: translateY(0);
   }
 </style>
