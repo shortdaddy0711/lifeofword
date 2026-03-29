@@ -28,6 +28,8 @@
   let loading = $state(false);
   let error = $state("");
 
+  let chapterCollapsed = $state([]);
+
   let progress = $state($progressStore);
 
   // Subscribe to progress updates
@@ -181,6 +183,7 @@
 
     try {
       segmentResult = await fetchSegment(currentPlan, currentSegmentIndex);
+      chapterCollapsed = []; // 새 페이지 진입 시 초기화
     } catch (err) {
       error = "Error loading content. Please try again.";
       console.error(err);
@@ -271,12 +274,25 @@
 
   {#each chapters as chapter, i}
     <ChapterCard 
+      id={`chapter-card-${i}`}
       label={chapter.label} 
-      initialCollapsed={i > 0}
+      initialCollapsed={chapterCollapsed[i] ?? (i > 0)}
       week={selectedWeek}
       day={selectedDay}
       isLastInSegment={chapter.isLastInSegment}
       hasMoreSegments={currentSegmentIndex < totalSegments - 1}
+      oncomplete={() => {
+        if (i + 1 < chapters.length) {
+          chapterCollapsed[i + 1] = false;
+          setTimeout(() => {
+            const nextEl = document.getElementById(`chapter-card-${i + 1}`);
+            if (nextEl) {
+              const y = nextEl.getBoundingClientRect().top + window.scrollY - 80; // 80px offset for sticky header
+              window.scrollTo({ top: y, behavior: 'smooth' });
+            }
+          }, 150);
+        }
+      }}
     >
       {#each chapter.verses as verse (verse.ref + "-" + verse.chapter)}
         <VerseRow {verse} showEsv={esvEnabled} />

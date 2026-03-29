@@ -6,12 +6,14 @@
   import { progressStore } from "$lib/stores/progressStore.js";
 
   let {
+    id = "",
     label = "",
     initialCollapsed = false,
     week = "",
     day = "",
     isLastInSegment = false,
     hasMoreSegments = false,
+    oncomplete,
     children,
   } = $props();
 
@@ -63,12 +65,14 @@
       } else {
         // Complete with summary
         progressStore.toggle(week, day, label, summary);
+        collapsed = true;
+        if (oncomplete) oncomplete();
       }
     }
   }
 </script>
 
-<div class="chapter-card-wrapper">
+<div class="chapter-card-wrapper" {id}>
   <Card class="p-0 gap-0 overflow-hidden">
     <div
       class="chapter-card-header"
