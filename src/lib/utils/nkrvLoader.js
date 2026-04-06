@@ -1,4 +1,4 @@
-import { BOOK_MAP } from "$lib/data/bookMap.js";
+import {BOOK_FULL_NAMES} from "$lib/data/bookFullNames.js"
 
 /** @type {Promise<Record<string, string>> | null} */
 let nkrvCachePromise = null;
@@ -119,7 +119,7 @@ export async function buildReadingPlan(reference) {
   const index = await loadNkrvIndex();
   const { bookName, startChapter, endChapter } =
     parseReadingReference(reference);
-  const bookKey = BOOK_MAP[bookName];
+  const bookKey = BOOK_FULL_NAMES[bookName];
 
   if (!bookKey) throw new Error(`Unsupported book name: ${bookName}`);
 
