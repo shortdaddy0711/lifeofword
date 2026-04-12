@@ -1,86 +1,63 @@
-import {BOOK_FULL_NAMES} from "$lib/data/bookFullNames.js"
-
-/** @type {Promise<Record<string, string>> | null} */
-let nkrvCachePromise = null;
-
-/** @type {Promise<NkrvIndex> | null} */
-let nkrvIndexPromise = null;
+import { BOOK_FULL_NAMES } from "$lib/data/bookFullNames.js";
 
 /**
+ * @typedef {{ verse_start: number, verse_end: number, text: string, book: string, chapter: number }} VerseData
  * @typedef {{ data: Record<string, string>, books: Record<string, BookData> }} NkrvIndex
  * @typedef {{ verseCount: number, chapters: Record<number, number[]> }} BookData
  */
 
-/** Fetch and cache the raw NKRV JSON data */
-export async function loadNkrvData() {
-  if (nkrvCachePromise) return nkrvCachePromise;
-
-  nkrvCachePromise = fetch("/assets/bible.json")
-    .then((response) => {
-      if (!response.ok) throw new Error("Failed to load NKRV data.");
-      return response.json();
-    })
-    .catch((err) => {
-      nkrvCachePromise = null;
-      throw err;
-    });
-
-  return nkrvCachePromise;
-}
+const NKRV_API_URL = "/api/nkrv";
 
 /**
- * Build a lookup index from the raw NKRV data.
- * Groups verses by book → chapter for fast access.
- * @param {Record<string, string>} data
- * @returns {NkrvIndex}
+ * Range-level cache to avoid redundant API calls within a session.
+ * Key: "<bookFullName>:<chapterStart>:<chapterEnd>" → Promise<VerseData[]>
+ * @type {Map<string, Promise<VerseData[]>>}
  */
-function buildNkrvIndex(data) {
-  /** @type {Record<string, BookData>} */
-  const books = {};
+const rangeCache = new Map();
 
-  for (const key of Object.keys(data)) {
-    const match = key.match(/^([^\d]+)(\d+):(\d+)$/);
-    if (!match) continue;
+/**
+ * Fetch all verses for a chapter range from the NKRV backend API (via SvelteKit proxy).
+ * Uses the /api/bible/chapters endpoint — a single network call for the entire range.
+ * Results are cached per range for the session lifetime.
+ * @param {string} bookFullName - Korean full book name (e.g. "창세기")
+ * @param {number} chapterStart
+ * @param {number} chapterEnd
+ * @returns {Promise<VerseData[]>}
+ */
+async function fetchNkrvChapters(bookFullName, chapterStart, chapterEnd) {
+  const cacheKey = `${bookFullName}:${chapterStart}:${chapterEnd}`;
 
-    const bookKey = match[1];
-    const chapter = Number(match[2]);
-    const verse = Number(match[3]);
-
-    if (!books[bookKey]) {
-      books[bookKey] = { verseCount: 0, chapters: {} };
-    }
-
-    const book = books[bookKey];
-    book.verseCount += 1;
-
-    if (!book.chapters[chapter]) {
-      book.chapters[chapter] = [];
-    }
-    book.chapters[chapter].push(verse);
+  if (rangeCache.has(cacheKey)) {
+    // @ts-ignore
+    return rangeCache.get(cacheKey);
   }
 
-  // Sort verses within each chapter
-  for (const book of Object.values(books)) {
-    for (const chapter of Object.keys(book.chapters)) {
-      book.chapters[chapter].sort((a, b) => a - b);
-    }
-  }
-
-  return { data, books };
-}
-
-/** Load NKRV data and build the index (cached) */
-export async function loadNkrvIndex() {
-  if (nkrvIndexPromise) return nkrvIndexPromise;
-
-  nkrvIndexPromise = loadNkrvData()
-    .then(buildNkrvIndex)
-    .catch((err) => {
-      nkrvIndexPromise = null;
-      throw err;
+  const promise = (async () => {
+    const params = new URLSearchParams({
+      book: bookFullName,
+      chapter_start: String(chapterStart),
+      chapter_end: String(chapterEnd),
     });
 
-  return nkrvIndexPromise;
+    const response = await fetch(`${NKRV_API_URL}?${params}`);
+
+    if (!response.ok) {
+      throw new Error(
+        `NKRV API error for ${bookFullName} chapters ${chapterStart}-${chapterEnd} (${response.status})`,
+      );
+    }
+
+    /** @type {VerseData[]} */
+    const data = await response.json();
+    return data;
+  })();
+
+  rangeCache.set(cacheKey, promise);
+
+  // Evict failed entries so the next attempt can retry
+  promise.catch(() => rangeCache.delete(cacheKey));
+
+  return promise;
 }
 
 /**
@@ -96,9 +73,7 @@ export function parseReadingReference(reference) {
     return { bookName, startChapter: 1, endChapter: 1 };
   }
 
-  const [startRaw, endRaw] = rangePart
-    .split("-")
-    .map((part) => part.trim());
+  const [startRaw, endRaw] = rangePart.split("-").map((part) => part.trim());
   const startChapter = Number(startRaw.split(":")[0]);
   const endChapter = Number((endRaw || startRaw).split(":")[0]);
 
@@ -111,41 +86,62 @@ export function parseReadingReference(reference) {
 
 /**
  * Build segmented reading plan for a reference.
- * Splits large readings into API-friendly chunks.
+ * Fetches NKRV verse data from the backend API and splits large readings
+ * into API-friendly chunks for the ESV fetcher.
  * @param {string} reference
  * @returns {Promise<ReadingPlan>}
  */
 export async function buildReadingPlan(reference) {
-  const index = await loadNkrvIndex();
   const { bookName, startChapter, endChapter } =
     parseReadingReference(reference);
   const bookKey = BOOK_FULL_NAMES[bookName];
 
   if (!bookKey) throw new Error(`Unsupported book name: ${bookName}`);
-
-  const bookData = index.books[bookKey];
-  if (!bookData) throw new Error(`Book not found in NKRV data: ${bookName}`);
   if (!startChapter || !endChapter) {
     throw new Error(`Invalid reference: ${reference}`);
   }
 
+  // Fetch the entire chapter range in a single API call
+  const allVerseData = await fetchNkrvChapters(bookKey, startChapter, endChapter);
+
+  // Build nkrvData lookup map (key format: "창세기1:1")
+  // and collect verse numbers per chapter for segmentation
+  /** @type {Record<string, string>} */
+  const nkrvData = {};
+  /** @type {Record<number, number[]>} */
+  const chaptersMap = {};
+  let totalVerseCount = 0;
+
+  for (const v of allVerseData) {
+    const key = `${v.book}${v.chapter}:${v.verse_start}`;
+    nkrvData[key] = v.text;
+
+    if (!chaptersMap[v.chapter]) {
+      chaptersMap[v.chapter] = [];
+    }
+    chaptersMap[v.chapter].push(v.verse_start);
+    totalVerseCount += 1;
+  }
+
+  // Flatten into an ordered verse list for segmentation
+  // API returns rows ordered by chapter then verse_start, so no re-sort needed
+  /** @type {Array<{ chapter: number, verse: number }>} */
   const verses = [];
-  for (let chapter = startChapter; chapter <= endChapter; chapter += 1) {
-    const verseNumbers = bookData.chapters[chapter];
-    if (!verseNumbers) continue;
-    for (const verse of verseNumbers) {
-      verses.push({ chapter, verse });
+  for (let ch = startChapter; ch <= endChapter; ch++) {
+    for (const v of chaptersMap[ch] ?? []) {
+      verses.push({ chapter: ch, verse: v });
     }
   }
 
   if (!verses.length) throw new Error(`No verses found for: ${reference}`);
 
-  const chapterCount = Object.keys(bookData.chapters).length;
+  // Segmentation: mirror the original logic using the fetched range size
+  const chapterCount = Object.keys(chaptersMap).length;
   const isSingleChapter = chapterCount === 1;
-  const halfBookLimit = isSingleChapter
+  const halfRangeLimit = isSingleChapter
     ? 500
-    : Math.floor(bookData.verseCount / 2);
-  const maxVerses = Math.min(500, halfBookLimit || 500);
+    : Math.floor(totalVerseCount / 2);
+  const maxVerses = Math.min(500, halfRangeLimit || 500);
 
   const segments = [];
   for (let i = 0; i < verses.length; i += maxVerses) {
@@ -165,7 +161,7 @@ export async function buildReadingPlan(reference) {
     totalVerses: verses.length,
     maxVerses,
     segments,
-    nkrvData: index.data,
+    nkrvData,
   };
 }
 
